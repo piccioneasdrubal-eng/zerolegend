@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>agar-server — il tuo gioco .io</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="mass"></div>
+  </div>
+
+  <div id="leaderboard">
+    <div class="lb-title">Leaderboard</div>
+    <ol id="lb-list"></ol>
+  </div>
+
+  <div id="minimap">
+    <canvas id="minimap-canvas" width="160" height="160"></canvas>
+    <div id="minimap-label">Minimappa</div>
+  </div>
+
+  <!-- Barra comandi: Split / Feed (touch + click) -->
+  <div id="controls">
+    <button id="btn-split" type="button" title="Spazio">💥 Split</button>
+    <button id="btn-feed" type="button" title="W">🥏 Feed</button>
+  </div>
+
+  <div id="bot-panel">
+    <details open>
+      <summary>🧪 Spawn Bot (allenamento)</summary>
+      <form id="bot-form">
+        <label>Numero <input id="bot-count" type="number" value="10" min="1" max="200" /></label>
+        <label>Massa <input id="bot-mass" type="number" value="30" min="1" max="10000" /></label>
+        <label>Nome <input id="bot-name" type="text" value="Bot" /></label>
+        <button type="submit">Spawna</button>
+      </form>
+      <div id="bot-status"></div>
+    </details>
+  </div>
+
+  <!-- Schermata di ingresso -->
+  <div id="menu">
+    <h1>agar-server</h1>
+    <p>Il tuo gioco .io — multiplayer, bot IA, split &amp; feed</p>
+    <input id="name" type="text" placeholder="Il tuo nickname" maxlength="16" />
+    <button id="play">Gioca</button>
+    <div class="hint">
+      <span>🖱️ Mouse = muoviti</span>
+      <span>⌨️ Spazio = split</span>
+      <span>⌨️ W = feed (espelli massa)</span>
+    </div>
+  </div>
+
+  <script src="client.js"></script>
+</body>
+</html>
