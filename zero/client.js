@@ -8,9 +8,11 @@
   // ============================================================
   // CONFIGURAZIONE — URL del game server
   // ------------------------------------------------------------
-  // ⚠️ METTI QUI il tuo URL ngrok (https, senza slash finale).
-  //     es: 'https://abcd1234.ngrok-free.app'
-  var SERVER_URL = 'https://sanctuary-visibly-cymbal.ngrok-free.dev'; // <-- URL del tuo tunnel ngrok
+  // Imposta SERVER_URL all'indirizzo del tuo server Ubuntu
+  // (senza slash finale), es. 'https://zerothelegend.gamer.gd'.
+  // Se lo lasci vuoto, il client assume che il gioco sia servito
+  // dallo STESSO host (utile in locale: `npm start` su localhost).
+  var SERVER_URL = 'https://zerothelegend.gamer.gd'; // <-- MODIFICATO PER PRODUZIONE
   // ============================================================
 
   function wsUrl(host) {
@@ -34,9 +36,9 @@
 
   // ===== stato =====
   let ws = null;
+  let state = { players: [], pellets: [], powerups: [], leaderboard: [] };
   let myId = null;
   let world = { width: 5000, height: 5000 };
-  let state = { players: [], pellets: [], leaderboard: [] };
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -88,10 +90,11 @@
   });
 
   // ===== websocket =====
+  let myColor = localStorage.getItem('skin-color') || null;
   function connect(name) {
     ws = new WebSocket(WS_ROOT);
 
-    ws.onopen = () => send({ type: 'join', name });
+    ws.onopen = () => send({ type: 'join', name, color: myColor });
 
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
@@ -99,9 +102,14 @@
         myId = msg.id;
         world = msg.world;
         document.getElementById('menu').style.display = 'none';
+        stats.startedAt = Date.now();
+        addChatMsg('ℹ️', `Benvenuto in agar-server! Usa la chat qui sotto.`, '#6ee7ff');
       } else if (msg.type === 'state') {
         state = msg;
         world = { width: msg.world.width, height: msg.world.height };
+        updateStats(msg);
+      } else if (msg.type === 'chat') {
+        addChatMsg(msg.name, msg.text, msg.id === myId ? '#6ee7ff' : '#fff');
       }
     };
 
@@ -179,6 +187,7 @@
 
     drawGrid();
     drawPellets();
+    drawPowerups();
     drawCells();
 
     ctx.restore();
@@ -232,14 +241,26 @@
     for (const p of state.players) {
       for (const c of p.cells) {
         const r = 10 * Math.sqrt(c.mass);
+        // effetto invisibile: solo io vedo la mia cella semi-trasparente
+        const alpha = p.invisible && p.id !== myId ? 0.15 : 1;
         // cerchio
         ctx.beginPath();
         ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+        ctx.globalAlpha = alpha;
         ctx.fillStyle = p.color;
         ctx.fill();
+        ctx.globalAlpha = 1;
         ctx.strokeStyle = 'rgba(0,0,0,0.35)';
         ctx.lineWidth = Math.max(1, r * 0.06);
+        if (p.invisible && p.id !== myId) ctx.strokeStyle = 'rgba(0,0,0,0.08)';
         ctx.stroke();
+
+        // indicatore effetto su di me
+        if (p.id === myId && p.speedBoost) {
+          ctx.strokeStyle = '#ffd54d';
+          ctx.lineWidth = r * 0.1;
+          ctx.stroke();
+        }
 
         // nome (solo se abbastanza grande o è me stesso)
         if (r > 20 || p.id === myId) {
@@ -247,7 +268,8 @@
           ctx.font = `bold ${Math.max(11, r * 0.35)}px sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(p.name + (p.isBot ? ' 🤖' : ''), c.x, c.y);
+          const label = p.name + (p.isBot ? ' 🤖' : '') + (p.speedBoost ? ' ⚡' : '');
+          ctx.fillText(label, c.x, c.y);
           if (p.id === myId) {
             ctx.font = `bold ${Math.max(9, r * 0.22)}px sans-serif`;
             ctx.fillText(Math.round(c.mass), c.x, c.y + r * 0.4);
@@ -319,10 +341,122 @@
 
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
+  // ===== CHAT =====
+  function addChatMsg(name, text, color) {
+    const box = document.getElementById('chat-box');
+    if (!box) return;
+    const div = document.createElement('div');
+    div.className = 'chat-msg';
+    div.innerHTML =
+      `<span class="chat-name" style="color:${color || '#fff'}">${escapeHtml(name)}</span>` +
+      `<span class="chat-text">${escapeHtml(text)}</span>`;
+    box.appendChild(div);
+    while (box.children.length > 60) box.removeChild(box.firstChild);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  const chatInput = document.getElementById('chat-input');
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && chatInput.value.trim()) {
+      send({ type: 'chat', text: chatInput.value.trim() });
+      chatInput.value = '';
+    }
+  });
+
+  // ===== STATISTICHE =====
+  const stats = {
+    startedAt: 0,
+    maxMass: 0,
+  };
+  function updateStats(msg) {
+    const m = msg.players.find((p) => p.id === myId);
+    if (!m) return;
+    if (m.mass > stats.maxMass) stats.maxMass = m.mass;
+    const el = document.getElementById('stats');
+    if (el) {
+      el.textContent = `⏱ ${Math.floor((Date.now() - stats.startedAt) / 1000)}s · 🏆 Max: ${stats.maxMass}`;
+    }
+  }
+
+  // ===== POWER-UP DRAW =====
+  function drawPowerups() {
+    const colors = {
+      virus: '#ff5c8a',
+      speed: '#ffd54d',
+      mass: '#7ef29a',
+      invisible: '#b48cff',
+      magnet: '#4dd0ff',
+    };
+    for (const pu of state.powerups || []) {
+      if (pu.x < camera.x - 1000 || pu.x > camera.x + 1000) continue;
+      if (pu.y < camera.y - 1000 || pu.y > camera.y + 1000) continue;
+      const r = 6 * Math.cbrt(pu.mass);
+      ctx.fillStyle = colors[pu.type] || '#fff';
+      ctx.beginPath();
+      if (pu.type === 'virus') {
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          const rr = i % 2 === 0 ? r : r * 0.7;
+          const px = pu.x + Math.cos(a) * rr;
+          const py = pu.y + Math.sin(a) * rr;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.arc(pu.x, pu.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,.55)';
+        ctx.font = `bold ${r}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const sym = { speed: '⚡', mass: '+', invisible: '👻', magnet: '🧲' }[pu.type] || '?';
+        ctx.fillText(sym, pu.x, pu.y + 1);
+      }
+    }
+  }
+
   function loop() {
     updateCamera();
     draw();
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
+
+  // ===== SKIN PANEL (colore + emoji preset) =====
+  const skinColors = ['#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c', '#4dd0ff', '#748ffc', '#b48cff', '#ff7ce0', '#ffffff'];
+  const skinPresets = ['', '🐱', '🐶', '👑', '🦁', '🔥', '⚔️', '🌙', '💎', '🚀', '👻', '🐲'];
+
+  const colorBox = document.getElementById('skin-colors');
+  skinColors.forEach((c) => {
+    const s = document.createElement('span');
+    s.style.background = c;
+    if (c === myColor) s.className = 'active';
+    s.addEventListener('click', () => {
+      myColor = c;
+      localStorage.setItem('skin-color', c);
+      colorBox.querySelectorAll('span').forEach((x) => x.classList.remove('active'));
+      s.classList.add('active');
+    });
+    colorBox.appendChild(s);
+  });
+
+  const presetBox = document.getElementById('skin-presets');
+  skinPresets.forEach((e) => {
+    const s = document.createElement('span');
+    s.textContent = e || '___';
+    s.addEventListener('click', () => {
+      const input = document.getElementById('name');
+      input.value = e + input.value;
+      input.focus();
+    });
+    presetBox.appendChild(s);
+  });
+
+  document.getElementById('skin-btn').addEventListener('click', () => {
+    document.getElementById('skin-panel').classList.toggle('open');
+  });
+  document.getElementById('skin-close').addEventListener('click', () => {
+    document.getElementById('skin-panel').classList.remove('open');
+  });
 })();
