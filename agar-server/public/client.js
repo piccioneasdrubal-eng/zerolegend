@@ -8,11 +8,11 @@
   // ============================================================
   // CONFIGURAZIONE — URL del game server
   // ------------------------------------------------------------
-  // Imposta SERVER_URL all'indirizzo del tuo server Render.com
-  // (senza slash finale), es. 'https://agar-server.onrender.com'.
+  // Imposta SERVER_URL all'indirizzo del tuo server Ubuntu
+  // (senza slash finale), es. 'https://zerothelegend.gamer.gd'.
   // Se lo lasci vuoto, il client assume che il gioco sia servito
   // dallo STESSO host (utile in locale: `npm start` su localhost).
-  var SERVER_URL = ''; // <-- MODIFICA QUI DOPO IL DEPLOY
+  var SERVER_URL = 'https://zerothelegend.gamer.gd'; // <-- MODIFICATO PER PRODUZIONE
   // ============================================================
 
   function wsUrl(host) {
